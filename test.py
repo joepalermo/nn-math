@@ -17,6 +17,7 @@ from allennlp.data.fields import TextField, MetadataField, ArrayField
 from allennlp.data.tokenizers.word_splitter import SpacyWordSplitter
 from allennlp.data.token_indexers import SingleIdTokenIndexer
 from utils import Config, MathDatasetReader
+from allennlp.data.iterators import BucketIterator
 
 
 config = Config(
@@ -25,9 +26,9 @@ config = Config(
 )
 
 reader = MathDatasetReader(config)
-train_ds = reader.read('data/mathematics_dataset-v1.0/train-easy/arithmetic__add_or_sub.txt')
-
-# len(train_ds)
-# vars(train_ds[0].fields['input_tokens'])
-vocab = Vocabulary.from_instances(train_ds, max_vocab_size=config.max_vocab_size)
-
+train_dataset = reader.read('data/mathematics_dataset-v1.0/train-easy/arithmetic__add_or_sub.txt')
+# TODO: split out val instead of using test set
+validation_dataset = reader.read('data/mathematics_dataset-v1.0/interpolate/arithmetic__add_or_sub.txt')
+vocab = Vocabulary.from_instances(train_dataset, max_vocab_size=config.max_vocab_size)
+iterator = BucketIterator(batch_size=config.batch_size, sorting_keys=[("input_tokens", "num_tokens")])
+iterator.index_with(vocab)
