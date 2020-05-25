@@ -1,14 +1,20 @@
 import logging
 from typing import *
+import torch
 from allennlp.data import Instance
 from allennlp.data.dataset_readers.seq2seq import Seq2SeqDatasetReader
 from allennlp.data.token_indexers import SingleIdTokenIndexer
 from allennlp.data.token_indexers import TokenIndexer
 from allennlp.data.tokenizers import Tokenizer
 from allennlp.data.tokenizers.character_tokenizer import CharacterTokenizer
+from allennlp.models.encoder_decoders.simple_seq2seq import SimpleSeq2Seq
+from allennlp.modules.attention import DotProductAttention
+from allennlp.modules.seq2seq_encoders import PytorchSeq2SeqWrapper, StackedSelfAttentionEncoder
+from allennlp.modules.text_field_embedders import BasicTextFieldEmbedder
+from allennlp.modules.token_embedders import Embedding
 from overrides import overrides
-
 logger = logging.getLogger(__name__)
+
 
 class Config(dict):
     def __init__(self, **kwargs):
@@ -61,3 +67,22 @@ class MathDatasetReader(Seq2SeqDatasetReader):
         if self._target_max_tokens and self._target_max_exceeded:
             logger.info("In %d instances, the target token length exceeded the max limit (%d) and were truncated.",
                         self._target_max_exceeded, self._target_max_tokens)
+
+
+def create_model(config, vocab):
+    embedding = Embedding(num_embeddings=vocab.get_vocab_size('tokens'), embedding_dim=config.embedding_dim)
+    if config.encoder_type == 'LSTM':
+        encoder = PytorchSeq2SeqWrapper(torch.nn.LSTM(config.embedding_dim, config.hidden_dim, batch_first=True))
+    elif config.encoder_type == 'transformer':
+        encoder = StackedSelfAttentionEncoder(input_dim=config.embedding_dim, hidden_dim=config.hidden_dim,
+                                              projection_dim=128,
+                                              feedforward_hidden_dim=128, num_layers=1, num_attention_heads=8)
+    source_embedder = BasicTextFieldEmbedder({"tokens": embedding})
+    max_decoding_steps = config.target_max_tokens
+    model = SimpleSeq2Seq(vocab, source_embedder, encoder, max_decoding_steps,
+                          target_embedding_dim=config.embedding_dim,
+                          target_namespace='target_tokens',
+                          attention=DotProductAttention(),
+                          beam_size=8,
+                          use_bleu=True)
+    return model
