@@ -20,6 +20,7 @@ from allennlp.data.fields import TextField, MetadataField, ArrayField
 
 from allennlp.data.tokenizers.character_tokenizer import CharacterTokenizer
 from allennlp.data.token_indexers import SingleIdTokenIndexer
+from allennlp.data.dataset_readers.seq2seq import Seq2SeqDatasetReader
 
 
 class Config(dict):
@@ -33,22 +34,7 @@ class Config(dict):
         setattr(self, key, val)
 
 
-class MathDatasetReader(DatasetReader):
-    def __init__(self, config: Dict) -> None:
-        super().__init__(lazy=False)
-        self.config = config
-        self.token_indexers = {"tokens": SingleIdTokenIndexer()}
-
-    def tokenizer(self, x: str):
-        return [c for c in CharacterTokenizer().tokenize(x)[:self.config.max_seq_len]]
-
-    @overrides
-    def text_to_instance(self, input_tokens: List[Token], output_tokens: List[Token]) -> Instance:
-        input_tokens_field = TextField(input_tokens, self.token_indexers)
-        fields = {"input_tokens": input_tokens_field}
-        output_tokens_field = TextField(output_tokens, self.token_indexers)
-        fields["output_tokens"] = output_tokens_field
-        return Instance(fields)
+class MathDatasetReader(Seq2SeqDatasetReader):
 
     @overrides
     def _read(self, filepath: str, limit=1000) -> Iterator[Instance]:
@@ -61,7 +47,4 @@ class MathDatasetReader(DatasetReader):
         for i in range(0, 2 * num_pairs, 2):
             question = lines[i].strip()
             answer = lines[i + 1].strip()
-            yield self.text_to_instance(
-                [x for x in self.tokenizer(question)],
-                [x for x in self.tokenizer(answer)]
-            )
+            yield self.text_to_instance(question, answer)
