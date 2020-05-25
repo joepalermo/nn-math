@@ -24,14 +24,18 @@ from sklearn.model_selection import train_test_split
 
 config = Config(
     batch_size=32,
-    max_seq_len=160,
+    source_max_tokens=160,
+    target_max_tokens=30,
     max_vocab_size=100000,
 )
 
 reader = MathDatasetReader(source_tokenizer=CharacterTokenizer(),
                            target_tokenizer=CharacterTokenizer(),
                            source_token_indexers={'tokens': SingleIdTokenIndexer()},
-                           target_token_indexers={'tokens': SingleIdTokenIndexer(namespace='target_tokens')})
+                           target_token_indexers={'tokens': SingleIdTokenIndexer(namespace='target_tokens')},
+                           source_max_tokens=config.source_max_tokens,
+                           target_max_tokens=config.target_max_tokens
+                           )
 train_dataset = reader.read('data/mathematics_dataset-v1.0/train-easy/arithmetic__add_or_sub.txt')
 train_dataset, val_dataset = train_test_split(train_dataset, p=0.5)
 test_dataset = reader.read('data/mathematics_dataset-v1.0/interpolate/arithmetic__add_or_sub.txt')
