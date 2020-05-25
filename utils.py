@@ -1,27 +1,12 @@
 import logging
-from pathlib import Path
 from typing import *
-import torch
-import torch.optim as optim
-import numpy as np
-import pandas as pd
-from functools import partial
-from overrides import overrides
 from allennlp.data import Instance
-from allennlp.data.token_indexers import TokenIndexer
-from allennlp.data.tokenizers import Token, Tokenizer
-from allennlp.nn import util as nn_util
-
-from allennlp.common.checks import ConfigurationError
-
-from allennlp.data.vocabulary import Vocabulary
-from allennlp.data.dataset_readers import DatasetReader
-
-from allennlp.data.fields import TextField, MetadataField, ArrayField
-
-from allennlp.data.tokenizers.character_tokenizer import CharacterTokenizer
-from allennlp.data.token_indexers import SingleIdTokenIndexer
 from allennlp.data.dataset_readers.seq2seq import Seq2SeqDatasetReader
+from allennlp.data.token_indexers import SingleIdTokenIndexer
+from allennlp.data.token_indexers import TokenIndexer
+from allennlp.data.tokenizers import Tokenizer
+from allennlp.data.tokenizers.character_tokenizer import CharacterTokenizer
+from overrides import overrides
 
 logger = logging.getLogger(__name__)
 

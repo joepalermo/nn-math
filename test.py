@@ -1,34 +1,30 @@
-from pathlib import Path
-from typing import *
+import itertools
 import torch
 import torch.optim as optim
-import numpy as np
-import pandas as pd
-from functools import partial
-from overrides import overrides
-from allennlp.data import Instance
-from allennlp.data.token_indexers import TokenIndexer
-from allennlp.data.tokenizers import Token
-from allennlp.nn import util as nn_util
-from allennlp.common.checks import ConfigurationError
-from allennlp.data.vocabulary import Vocabulary
-from allennlp.data.dataset_readers import DatasetReader
-from allennlp.data.fields import TextField, MetadataField, ArrayField
-from allennlp.data.tokenizers.word_splitter import SpacyWordSplitter
-from allennlp.data.tokenizers.character_tokenizer import CharacterTokenizer
-from allennlp.data.token_indexers import SingleIdTokenIndexer
-from utils import Config, MathDatasetReader
 from allennlp.data.iterators import BucketIterator
+from allennlp.data.token_indexers import SingleIdTokenIndexer
+from allennlp.data.tokenizers.character_tokenizer import CharacterTokenizer
+from allennlp.data.vocabulary import Vocabulary
+from allennlp.models.encoder_decoders.simple_seq2seq import SimpleSeq2Seq
+from allennlp.modules.attention import DotProductAttention
+from allennlp.modules.seq2seq_encoders import StackedSelfAttentionEncoder
+from allennlp.modules.text_field_embedders import BasicTextFieldEmbedder
+from allennlp.modules.token_embedders import Embedding
+from allennlp.predictors import SimpleSeq2SeqPredictor
+from allennlp.training.trainer import Trainer
 from sklearn.model_selection import train_test_split
-
+from utils import Config, MathDatasetReader
 
 config = Config(
-    batch_size=32,
     source_max_tokens=160,
     target_max_tokens=30,
     max_vocab_size=100000,
+    batch_size=32,
+    embedding_dim=32,
+    hidden_dim=32
 )
 
+# prep data
 reader = MathDatasetReader(source_tokenizer=CharacterTokenizer(),
                            target_tokenizer=CharacterTokenizer(),
                            source_token_indexers={'tokens': SingleIdTokenIndexer()},
@@ -37,11 +33,52 @@ reader = MathDatasetReader(source_tokenizer=CharacterTokenizer(),
                            target_max_tokens=config.target_max_tokens
                            )
 train_dataset = reader.read('data/mathematics_dataset-v1.0/train-easy/arithmetic__add_or_sub.txt')
-train_dataset, val_dataset = train_test_split(train_dataset, p=0.5)
+train_dataset, validation_dataset = train_test_split(train_dataset, test_size=0.5)
 test_dataset = reader.read('data/mathematics_dataset-v1.0/interpolate/arithmetic__add_or_sub.txt')
-
 vocab = Vocabulary.from_instances(train_dataset, max_vocab_size=config.max_vocab_size)
-iterator = BucketIterator(batch_size=config.batch_size, sorting_keys=[("input_tokens", "num_tokens")])
+
+# create model
+embedding = Embedding(num_embeddings=vocab.get_vocab_size('tokens'), embedding_dim=config.embedding_dim)
+# encoder = PytorchSeq2SeqWrapper(torch.nn.LSTM(config.embedding_dim, config.hidden_dim, batch_first=True))
+encoder = StackedSelfAttentionEncoder(input_dim=config.embedding_dim, hidden_dim=config.hidden_dim, projection_dim=128,
+                                      feedforward_hidden_dim=128, num_layers=1, num_attention_heads=8)
+source_embedder = BasicTextFieldEmbedder({"tokens": embedding})
+# attention = LinearAttention(HIDDEN_DIM, HIDDEN_DIM, activation=Activation.by_name('tanh')())
+# attention = BilinearAttention(HIDDEN_DIM, HIDDEN_DIM)
+attention = DotProductAttention()
+max_decoding_steps = 20   # TODO: make this variable
+model = SimpleSeq2Seq(vocab, source_embedder, encoder, max_decoding_steps,
+                      target_embedding_dim=config.embedding_dim,
+                      target_namespace='target_tokens',
+                      attention=attention,
+                      beam_size=8,
+                      use_bleu=True)
+
+# configure training loop
+optimizer = optim.Adam(model.parameters())
+iterator = BucketIterator(batch_size=config.batch_size, sorting_keys=[("source_tokens", "num_tokens")])
 iterator.index_with(vocab)
+if torch.cuda.is_available():
+    cuda_device = 0
+    model = model.cuda(cuda_device)
+else:
+    cuda_device = -1
+trainer = Trainer(model=model,
+                  optimizer=optimizer,
+                  iterator=iterator,
+                  train_dataset=train_dataset,
+                  validation_dataset=validation_dataset,
+                  num_epochs=1,
+                  cuda_device=cuda_device)
 
+# training loop
+for i in range(3):
+    print('Epoch: {}'.format(i))
+    trainer.train()
 
+    predictor = SimpleSeq2SeqPredictor(model, reader)
+
+    for instance in itertools.islice(validation_dataset, 10):
+        print('SOURCE:', instance.fields['source_tokens'].tokens)
+        print('GOLD:', instance.fields['target_tokens'].tokens)
+        print('PRED:', predictor.predict_instance(instance)['predicted_tokens'])
