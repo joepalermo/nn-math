@@ -10,7 +10,7 @@ from allennlp.modules.attention import DotProductAttention
 from allennlp.modules.seq2seq_encoders import StackedSelfAttentionEncoder
 from allennlp.modules.text_field_embedders import BasicTextFieldEmbedder
 from allennlp.modules.token_embedders import Embedding
-from allennlp.predictors import SimpleSeq2SeqPredictor
+from allennlp.predictors import SimpleSeq2SeqPredictor, Seq2SeqPredictor
 from allennlp.training.trainer import Trainer
 from sklearn.model_selection import train_test_split
 from utils import Config, MathDatasetReader
@@ -21,7 +21,8 @@ config = Config(
     max_vocab_size=100000,
     batch_size=32,
     embedding_dim=32,
-    hidden_dim=32
+    hidden_dim=32,
+    n_epochs=50
 )
 
 # prep data
@@ -72,13 +73,11 @@ trainer = Trainer(model=model,
                   cuda_device=cuda_device)
 
 # training loop
-for i in range(3):
+for i in range(config.n_epochs):
     print('Epoch: {}'.format(i))
     trainer.train()
-
-    predictor = SimpleSeq2SeqPredictor(model, reader)
-
+    predictor = Seq2SeqPredictor(model, reader)
     for instance in itertools.islice(validation_dataset, 10):
-        print('SOURCE:', instance.fields['source_tokens'].tokens)
-        print('GOLD:', instance.fields['target_tokens'].tokens)
-        print('PRED:', predictor.predict_instance(instance)['predicted_tokens'])
+        print('input:', instance.fields['source_tokens'].tokens)
+        print('target:', instance.fields['target_tokens'].tokens)
+        print('predicted:', predictor.predict_instance(instance)['predicted_tokens'])
