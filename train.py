@@ -13,7 +13,7 @@ from utils import Config, MathDatasetReader, create_model
 config = Config(
     source_max_tokens=160,
     target_max_tokens=30,
-    max_vocab_size=100000,
+    max_vocab_size=1000,
     encoder_type='transformer',
     embedding_dim=32,
     hidden_dim=32,
